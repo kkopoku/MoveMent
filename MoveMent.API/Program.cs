@@ -1,41 +1,50 @@
+using Microsoft.EntityFrameworkCore;
+using MoveMent.API.Configurations;
+using DotNetEnv;
+
 var builder = WebApplication.CreateBuilder(args);
+Env.Load();
+
+
+// Read from environment
+var server = Environment.GetEnvironmentVariable("DB_SERVER") ?? throw new Exception("MONGO_CONNECTION_STRING not set.");
+var port = Environment.GetEnvironmentVariable("DB_PORT") ?? throw new Exception("MONGO_CONNECTION_STRING not set.");
+var database = Environment.GetEnvironmentVariable("DB_NAME") ?? throw new Exception("MONGO_CONNECTION_STRING not set.");
+var user = Environment.GetEnvironmentVariable("DB_USER") ?? throw new Exception("MONGO_CONNECTION_STRING not set.");
+var password = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? throw new Exception("MONGO_CONNECTION_STRING not set.");
+
+
+// construct connection string
+var connectionString = $"server={server};port={port};database={database};user={user};password={password}";
+
 
 // Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddDbContext<MoveMentDbContext>(options =>
+    options.UseMySql(
+        connectionString,
+        new MySqlServerVersion(new Version(8, 0, 29))
+    )
+);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Test Database Connection
+using (var scope = app.Services.CreateScope())
 {
+    var db = scope.ServiceProvider.GetRequiredService<MoveMentDbContext>();
+    if (await db.Database.CanConnectAsync()){
+        Console.WriteLine("DB connected!");
+    }else{
+        Console.WriteLine("DB not reachable.");
+    }
+}
+
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment()){
     app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
-
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
